@@ -5,6 +5,9 @@ create table plans(id bigint generated always as identity primary key,name text 
 create table testimonials(id bigint generated always as identity primary key,name text not null,role text,quote text,photo_url text);
 create table slides(id bigint generated always as identity primary key,headline text not null,subtext text,image_url text,sort int default 0);
 create table settings(id bigint generated always as identity primary key,brand text,about text,email text,address text);
+-- Storage bucket for images uploaded from the admin panel (public so uploaded photos are viewable on the site)
+insert into storage.buckets (id, name, public) values ('media','media', true) on conflict (id) do nothing;
+
 create table team(id bigint generated always as identity primary key,name text not null,position text,bio text,photo_url text,linkedin text,twitter text,instagram text,sort int default 0);
 create table consultations(id bigint generated always as identity primary key,name text,email text,project_type text,details text,status text default 'new',created_at timestamptz default now());
 alter table services enable row level security;alter table projects enable row level security;alter table posts enable row level security;

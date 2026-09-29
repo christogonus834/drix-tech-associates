@@ -1,8 +1,9 @@
 require('dotenv').config();
-const express=require('express'),cors=require('cors'),jwt=require('jsonwebtoken'),path=require('path');
+const express=require('express'),cors=require('cors'),jwt=require('jsonwebtoken'),path=require('path'),multer=require('multer');
 const {createClient}=require('@supabase/supabase-js');
 const db=createClient(process.env.SUPABASE_URL,process.env.SUPABASE_SERVICE_KEY);
 const app=express();app.use(cors(),express.json());
+const upload=multer({storage:multer.memoryStorage(),limits:{fileSize:8*1024*1024}});
 const PUBLIC=['services','projects','posts','plans','testimonials','slides','settings','team'];
 const ALL=[...PUBLIC,'consultations'];
 const auth=(req,res,next)=>{try{jwt.verify((req.headers.authorization||'').replace('Bearer ',''),process.env.JWT_SECRET);next()}catch{res.status(401).json({error:'Unauthorized'})}};
@@ -20,8 +21,22 @@ app.get('/api/admin/:t',async(req,res)=>send(res,await db.from(req.params.t).sel
 app.post('/api/admin/:t',async(req,res)=>send(res,await db.from(req.params.t).insert(req.body).select().single()));
 app.put('/api/admin/:t/:id',async(req,res)=>{delete req.body.id;send(res,await db.from(req.params.t).update(req.body).eq('id',req.params.id).select().single())});
 app.delete('/api/admin/:t/:id',async(req,res)=>send(res,await db.from(req.params.t).delete().eq('id',req.params.id)));
+
+// Local image upload -> Supabase Storage (bucket "media", created by supabase/schema.sql). Returns a public URL.
+app.post('/api/admin/upload',auth,upload.single('file'),async(req,res)=>{
+ if(!req.file)return res.status(400).json({error:'No file provided'});
+ if(!req.file.mimetype.startsWith('image/'))return res.status(400).json({error:'Only image files are allowed'});
+ const ext=(path.extname(req.file.originalname)||'.jpg').toLowerCase();
+ const key=`uploads/${Date.now()}-${Math.random().toString(36).slice(2)}${ext}`;
+ const{error}=await db.storage.from('media').upload(key,req.file.buffer,{contentType:req.file.mimetype,upsert:true});
+ if(error)return res.status(400).json({error:error.message});
+ const{data}=db.storage.from('media').getPublicUrl(key);
+ res.json({url:data.publicUrl})});
+
 const fs=require('fs');
 const pub=path.join(__dirname,'public');
-if(fs.existsSync(pub))app.use(express.static(pub)); // only used if you keep frontend+backend together
-app.get('/',(req,res)=>fs.existsSync(pub)?res.sendFile(path.join(pub,'index.html')):res.json({ok:true,message:'DRIX backend is running'}));
+if(fs.existsSync(pub)){
+ app.use(express.static(pub,{extensions:['html']})); // clean URLs (/about -> about.html) when frontend+backend are hosted together
+ app.get('/',(req,res)=>res.sendFile(path.join(pub,'index.html')));
+}else app.get('/',(req,res)=>res.json({ok:true,message:'DRIX backend is running'}));
 app.listen(process.env.PORT||3000,()=>console.log('Running on http://localhost:'+(process.env.PORT||3000)));
