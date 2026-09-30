@@ -16,13 +16,9 @@ app.post('/api/consultations',async(req,res)=>{const{name,email,project_type,det
  if(!name||!/\S+@\S+/.test(email||''))return res.status(400).json({error:'Name and valid email required'});
  send(res,await db.from('consultations').insert({name,email,project_type,details}).select().single())});
 PUBLIC.forEach(t=>app.get(`/api/${t}`,async(req,res)=>send(res,await db.from(t).select('*').order(t=='settings'?'id':'sort',{ascending:true}).limit(t=='settings'?1:1000))));
-app.use('/api/admin/:t',auth,(req,res,next)=>ALL.includes(req.params.t)?next():res.status(404).json({error:'Unknown resource'}));
-app.get('/api/admin/:t',async(req,res)=>send(res,await db.from(req.params.t).select('*').order('id',{ascending:false})));
-app.post('/api/admin/:t',async(req,res)=>send(res,await db.from(req.params.t).insert(req.body).select().single()));
-app.put('/api/admin/:t/:id',async(req,res)=>{delete req.body.id;send(res,await db.from(req.params.t).update(req.body).eq('id',req.params.id).select().single())});
-app.delete('/api/admin/:t/:id',async(req,res)=>send(res,await db.from(req.params.t).delete().eq('id',req.params.id)));
 
 // Local image upload -> Supabase Storage (bucket "media", created by supabase/schema.sql). Returns a public URL.
+// Registered BEFORE the /api/admin/:t catch-all below, since that would otherwise treat "upload" as an unknown table name.
 app.post('/api/admin/upload',auth,upload.single('file'),async(req,res)=>{
  if(!req.file)return res.status(400).json({error:'No file provided'});
  if(!req.file.mimetype.startsWith('image/'))return res.status(400).json({error:'Only image files are allowed'});
@@ -32,6 +28,12 @@ app.post('/api/admin/upload',auth,upload.single('file'),async(req,res)=>{
  if(error)return res.status(400).json({error:error.message});
  const{data}=db.storage.from('media').getPublicUrl(key);
  res.json({url:data.publicUrl})});
+
+app.use('/api/admin/:t',auth,(req,res,next)=>ALL.includes(req.params.t)?next():res.status(404).json({error:'Unknown resource'}));
+app.get('/api/admin/:t',async(req,res)=>send(res,await db.from(req.params.t).select('*').order('id',{ascending:false})));
+app.post('/api/admin/:t',async(req,res)=>send(res,await db.from(req.params.t).insert(req.body).select().single()));
+app.put('/api/admin/:t/:id',async(req,res)=>{delete req.body.id;send(res,await db.from(req.params.t).update(req.body).eq('id',req.params.id).select().single())});
+app.delete('/api/admin/:t/:id',async(req,res)=>send(res,await db.from(req.params.t).delete().eq('id',req.params.id)));
 
 const fs=require('fs');
 const pub=path.join(__dirname,'public');
